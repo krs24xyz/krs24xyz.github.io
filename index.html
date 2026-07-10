@@ -7,11 +7,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet" />
   <style>
     @font-face {
-      font-family: 'Better VCR';
-      src: url('BetterVCR.ttf') format('truetype');
+      font-family: 'BetterVCR';
+      src: url('https://krs24xyz.github.io/BetterVCR.ttf') format('truetype');
       font-weight: normal;
       font-style: normal;
     }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     html, body {
@@ -40,21 +41,22 @@
     .wordmark-inner {
       display: flex;
       flex-direction: column;
-      align-items: stretch;
-      gap: 0.05em;
+      align-items: center;
+      gap: 6px;
       opacity: 0;
       animation: appear 1.2s cubic-bezier(0.16, 1, 0.3, 1) 1.6s forwards;
+      pointer-events: auto;
+      cursor: default;
     }
 
     .line-krs24 {
-      font-family: 'Better VCR', monospace;
+      font-family: 'BetterVCR', monospace;
       font-weight: 400;
       font-size: clamp(20px, 4.5vw, 58px);
       letter-spacing: 0.12em;
       color: #E8E4DC;
       line-height: 1;
       text-transform: uppercase;
-      image-rendering: pixelated;
       text-align: center;
     }
 
@@ -69,40 +71,7 @@
       padding-left: 0.45em;
     }
 
-    .speech-bubble {
-      position: fixed;
-      z-index: 20;
-      left: 50%;
-      transform: translateX(-50%);
-      bottom: calc(50% + 80px);
-      background: #E8E4DC;
-      color: #09090B;
-      font-family: 'Better VCR', monospace;
-      font-size: clamp(18px, 3vw, 36px);
-      letter-spacing: 0.1em;
-      padding: 18px 32px;
-      border-radius: 12px;
-      white-space: nowrap;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.15s ease;
-    }
-
-    .speech-bubble.visible {
-      opacity: 1;
-    }
-
-    /* The tail pointing down toward the text */
-    .speech-bubble::after {
-      content: '';
-      position: absolute;
-      bottom: -18px;
-      left: 50%;
-      transform: translateX(-50%);
-      border: 10px solid transparent;
-      border-top-color: #E8E4DC;
-      border-bottom: none;
-    }
+    @keyframes appear {
       from { opacity: 0; }
       to   { opacity: 1; }
     }
@@ -132,33 +101,29 @@
 
 <canvas id="c"></canvas>
 
-<a class="ig-link" href="https://instagram.com/napsandbicycles" target="_blank" rel="noopener">@napsandbicycles</a>
-
-<div class="speech-bubble" id="bubble">HELLO</div>
-
 <div class="wordmark" aria-label="krs24.studio">
-  <div class="wordmark-inner" id="wordmark-inner" style="cursor:pointer">
-    <span class="line-krs24">KRS24</span>
-    <span class="line-studio">.studio</span>
+  <div class="wordmark-inner" id="wordmark-inner">
+    <span class="line-krs24" id="krs24-line">KRS24</span>
+    <span class="line-studio" id="studio-line">.studio</span>
   </div>
 </div>
+
+<a class="ig-link" href="https://instagram.com/napsandbicycles" target="_blank" rel="noopener">@napsandbicycles</a>
 
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
 let W, H, dpr;
-let t = 0;
 let lines = [];
 let glyphs = [];
 let annotations = [];
-let mouseY = null;
 let mouseX = null;
+let mouseY = null;
 
 window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; }, { passive: true });
 window.addEventListener('mouseleave', () => { mouseX = null; mouseY = null; });
 
-// ── Palette
 const BG       = '#080809';
 const GRID     = 'rgba(28, 36, 48, 0.9)';
 const GRIDFADE = 'rgba(18, 24, 32, 0.5)';
@@ -184,297 +149,156 @@ function rand(a, b) { return a + Math.random() * (b - a); }
 function pick(arr)   { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function buildScene() {
-  lines = [];
-  glyphs = [];
-  annotations = [];
-
+  lines = []; glyphs = []; annotations = [];
   const STEP = Math.round(W / 22);
 
-  // Vertical construction lines
   for (let x = STEP; x < W; x += STEP * (Math.random() < 0.3 ? 2 : 1)) {
     if (Math.random() < 0.45) continue;
-    const y0 = rand(0, H * 0.3);
-    const y1 = rand(H * 0.7, H);
+    const y0 = rand(0, H * 0.3), y1 = rand(H * 0.7, H);
     lines.push({ kind: 'v', x, y0, y1, color: Math.random() < 0.15 ? BLUETHIN : GRID, w: Math.random() < 0.12 ? 0.8 : 0.3 });
   }
-
-  // Horizontal construction lines
   for (let y = STEP; y < H; y += STEP * (Math.random() < 0.3 ? 2 : 1)) {
     if (Math.random() < 0.5) continue;
-    const x0 = rand(0, W * 0.25);
-    const x1 = rand(W * 0.75, W);
+    const x0 = rand(0, W * 0.25), x1 = rand(W * 0.75, W);
     lines.push({ kind: 'h', y, x0, x1, color: Math.random() < 0.12 ? BLUETHIN : GRIDFADE, w: Math.random() < 0.08 ? 0.8 : 0.3 });
   }
-
-  // Crosshair markers
-  const crosshairCount = Math.floor(rand(10, 18));
-  for (let i = 0; i < crosshairCount; i++) {
-    const x = rand(W * 0.04, W * 0.96);
-    const y = rand(H * 0.05, H * 0.95);
-    const sz = rand(5, 14);
+  for (let i = 0; i < Math.floor(rand(10, 18)); i++) {
     const copper = Math.random() < 0.22;
-    lines.push({ kind: 'cross', x, y, sz, color: copper ? COPPER : GRID, w: copper ? 0.7 : 0.4 });
+    lines.push({ kind: 'cross', x: rand(W*0.04, W*0.96), y: rand(H*0.05, H*0.95), sz: rand(5, 14), color: copper ? COPPER : GRID, w: copper ? 0.7 : 0.4 });
   }
-
-  // Small hollow squares
-  const squareCount = Math.floor(rand(3, 7));
-  for (let i = 0; i < squareCount; i++) {
-    const x = rand(W * 0.05, W * 0.95);
-    const y = rand(H * 0.05, H * 0.95);
-    const sz = rand(3, 7);
-    lines.push({ kind: 'square', x, y, sz, color: Math.random() < 0.2 ? COPPER : GRID, w: 0.3 });
+  for (let i = 0; i < Math.floor(rand(3, 7)); i++) {
+    lines.push({ kind: 'square', x: rand(W*0.05, W*0.95), y: rand(H*0.05, H*0.95), sz: rand(3, 7), color: Math.random() < 0.2 ? COPPER : GRID, w: 0.3 });
   }
-
-  // Dimension tick marks
-  const tickCount = Math.floor(rand(6, 14));
-  for (let i = 0; i < tickCount; i++) {
-    const horiz = Math.random() < 0.5;
-    if (horiz) {
-      const y = rand(H * 0.1, H * 0.9);
-      const x0 = rand(W * 0.05, W * 0.4);
-      const x1 = x0 + rand(40, 160);
+  for (let i = 0; i < Math.floor(rand(6, 14)); i++) {
+    if (Math.random() < 0.5) {
+      const y = rand(H*0.1, H*0.9), x0 = rand(W*0.05, W*0.4), x1 = x0 + rand(40, 160);
       lines.push({ kind: 'dim-h', y, x0, x1, color: GRID, w: 0.3 });
     } else {
-      const x = rand(W * 0.05, W * 0.95);
-      const y0 = rand(H * 0.05, H * 0.5);
-      const y1 = y0 + rand(40, 140);
+      const x = rand(W*0.05, W*0.95), y0 = rand(H*0.05, H*0.5), y1 = y0 + rand(40, 140);
       lines.push({ kind: 'dim-v', x, y0, y1, color: GRID, w: 0.3 });
     }
   }
-
-  // Diagonal lines — very sparse
-  const diagCount = Math.floor(rand(1, 4));
-  for (let i = 0; i < diagCount; i++) {
-    const x0 = rand(0, W);
-    const y0 = rand(0, H);
-    const len = rand(60, 180);
-    const angle = rand(-Math.PI * 0.3, Math.PI * 0.3);
-    lines.push({ kind: 'diag', x0, y0, x1: x0 + Math.cos(angle) * len, y1: y0 + Math.sin(angle) * len, color: 'rgba(28,36,50,0.7)', w: 0.3 });
+  for (let i = 0; i < Math.floor(rand(1, 4)); i++) {
+    const x0 = rand(0,W), y0 = rand(0,H), len = rand(60,180), a = rand(-Math.PI*0.3, Math.PI*0.3);
+    lines.push({ kind: 'diag', x0, y0, x1: x0+Math.cos(a)*len, y1: y0+Math.sin(a)*len, color: 'rgba(28,36,50,0.7)', w: 0.3 });
   }
-
-  // Corner bracket pairs
-  const corners = [
-    [W * 0.06, H * 0.07],
-    [W * 0.91, H * 0.07],
-    [W * 0.06, H * 0.90],
-    [W * 0.91, H * 0.90],
-  ];
-  corners.forEach(([x, y], i) => {
+  [[W*0.06,H*0.07],[W*0.91,H*0.07],[W*0.06,H*0.90],[W*0.91,H*0.90]].forEach(([x,y],i) => {
     if (Math.random() < 0.3) return;
-    const sz = rand(14, 28);
-    const copper = i === 1;
-    lines.push({ kind: 'bracket', x, y, sz, corner: i, color: copper ? COPPER : BLUE, w: copper ? 0.8 : 0.5 });
+    lines.push({ kind: 'bracket', x, y, sz: rand(14,28), corner: i, color: i===1 ? COPPER : BLUE, w: i===1 ? 0.8 : 0.5 });
   });
-
-  // Arc / circle element — one or two
-  const arcCount = Math.floor(rand(1, 3));
-  for (let i = 0; i < arcCount; i++) {
-    lines.push({
-      kind: 'arc',
-      x: rand(W * 0.55, W * 0.78),
-      y: rand(H * 0.18, H * 0.72),
-      r: rand(28, 55),
-      start: rand(0, Math.PI),
-      end: rand(Math.PI, Math.PI * 2),
-      color: BLUE,
-      w: 0.4,
-    });
+  for (let i = 0; i < Math.floor(rand(1, 3)); i++) {
+    lines.push({ kind: 'arc', x: rand(W*0.55,W*0.78), y: rand(H*0.18,H*0.72), r: rand(28,55), start: rand(0,Math.PI), end: rand(Math.PI,Math.PI*2), color: BLUE, w: 0.4 });
   }
-
-  // Small text glyphs
-  const labelPool = [
-    'B1','A2','T','V','∅','×','◇','B1','A1','R','COMM',
-    '9.3','11.2','∆','⊕','▪','0.5','3.5',
-  ];
-  const glyphCount = Math.floor(rand(18, 30));
-  for (let i = 0; i < glyphCount; i++) {
-    glyphs.push({
-      x: rand(W * 0.02, W * 0.96),
-      y: rand(H * 0.03, H * 0.97),
-      text: pick(labelPool),
-      size: rand(7, 11),
-      color: Math.random() < 0.2 ? 'rgba(90,50,24,0.35)' : GLYPHTXT,
-    });
+  const labelPool = ['B1','A2','T','V','∅','×','◇','A1','R','COMM','9.3','11.2','∆','⊕','▪','0.5','3.5'];
+  for (let i = 0; i < Math.floor(rand(18, 30)); i++) {
+    glyphs.push({ x: rand(W*0.02,W*0.96), y: rand(H*0.03,H*0.97), text: pick(labelPool), size: rand(7,11), color: Math.random()<0.2?'rgba(90,50,24,0.35)':GLYPHTXT });
   }
-
-  // Dotted rulers — top, bottom, left
-  annotations.push({ kind: 'ruler-top',    x0: W*0.04, x1: W*0.96, y: H*0.04 });
-  annotations.push({ kind: 'ruler-bottom', x0: W*0.04, x1: W*0.96, y: H*0.95 });
-  annotations.push({ kind: 'ruler-left',   y0: H*0.04, y1: H*0.95, x: W*0.035 });
-  annotations.push({ kind: 'ruler-right',  y0: H*0.04, y1: H*0.95, x: W*0.965 });
+  annotations.push({ kind: 'ruler-top',    x0: W*0.04, x1: W*0.96, y:  H*0.04 });
+  annotations.push({ kind: 'ruler-bottom', x0: W*0.04, x1: W*0.96, y:  H*0.95 });
+  annotations.push({ kind: 'ruler-left',   y0: H*0.04, y1: H*0.95, x:  W*0.035 });
+  annotations.push({ kind: 'ruler-right',  y0: H*0.04, y1: H*0.95, x:  W*0.965 });
 }
 
-function drawScene(time) {
+function drawScene() {
   ctx.clearRect(0, 0, W, H);
-
-  // Background
   ctx.fillStyle = BG;
   ctx.fillRect(0, 0, W, H);
 
-  // Very subtle radial darkening toward edges
-  const vignette = ctx.createRadialGradient(W/2, H/2, H*0.1, W/2, H/2, H*0.85);
-  vignette.addColorStop(0, 'rgba(0,0,0,0)');
-  vignette.addColorStop(1, 'rgba(0,0,0,0.55)');
-  ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, W, H);
+  const vig = ctx.createRadialGradient(W/2,H/2,H*0.1,W/2,H/2,H*0.85);
+  vig.addColorStop(0,'rgba(0,0,0,0)');
+  vig.addColorStop(1,'rgba(0,0,0,0.55)');
+  ctx.fillStyle = vig;
+  ctx.fillRect(0,0,W,H);
 
-  // Draw construction lines
   lines.forEach(l => {
     ctx.save();
     ctx.strokeStyle = l.color;
     ctx.lineWidth = l.w;
-    ctx.globalAlpha = 1;
     ctx.beginPath();
-
-    if (l.kind === 'v') {
-      ctx.moveTo(l.x, l.y0);
-      ctx.lineTo(l.x, l.y1);
-    } else if (l.kind === 'h') {
-      ctx.moveTo(l.x0, l.y);
-      ctx.lineTo(l.x1, l.y);
-    } else if (l.kind === 'cross') {
-      ctx.moveTo(l.x - l.sz, l.y);
-      ctx.lineTo(l.x + l.sz, l.y);
-      ctx.moveTo(l.x, l.y - l.sz);
-      ctx.lineTo(l.x, l.y + l.sz);
-    } else if (l.kind === 'dim-h') {
-      // Dimension line with end ticks
-      ctx.moveTo(l.x0, l.y);
-      ctx.lineTo(l.x1, l.y);
-      ctx.moveTo(l.x0, l.y - 4); ctx.lineTo(l.x0, l.y + 4);
-      ctx.moveTo(l.x1, l.y - 4); ctx.lineTo(l.x1, l.y + 4);
-    } else if (l.kind === 'dim-v') {
-      ctx.moveTo(l.x, l.y0);
-      ctx.lineTo(l.x, l.y1);
-      ctx.moveTo(l.x - 4, l.y0); ctx.lineTo(l.x + 4, l.y0);
-      ctx.moveTo(l.x - 4, l.y1); ctx.lineTo(l.x + 4, l.y1);
-    } else if (l.kind === 'bracket') {
-      const sz = l.sz;
-      const dx = l.corner % 2 === 0 ? 1 : -1;
-      const dy = l.corner < 2 ? 1 : -1;
-      ctx.moveTo(l.x + dx * sz, l.y);
-      ctx.lineTo(l.x, l.y);
-      ctx.lineTo(l.x, l.y + dy * sz);
-    } else if (l.kind === 'arc') {
-      ctx.arc(l.x, l.y, l.r, l.start, l.end);
-    } else if (l.kind === 'square') {
-      ctx.rect(l.x - l.sz, l.y - l.sz, l.sz * 2, l.sz * 2);
-    } else if (l.kind === 'diag') {
-      ctx.moveTo(l.x0, l.y0);
-      ctx.lineTo(l.x1, l.y1);
-    }
-
+    if      (l.kind==='v')      { ctx.moveTo(l.x,l.y0); ctx.lineTo(l.x,l.y1); }
+    else if (l.kind==='h')      { ctx.moveTo(l.x0,l.y); ctx.lineTo(l.x1,l.y); }
+    else if (l.kind==='cross')  { ctx.moveTo(l.x-l.sz,l.y); ctx.lineTo(l.x+l.sz,l.y); ctx.moveTo(l.x,l.y-l.sz); ctx.lineTo(l.x,l.y+l.sz); }
+    else if (l.kind==='dim-h')  { ctx.moveTo(l.x0,l.y); ctx.lineTo(l.x1,l.y); ctx.moveTo(l.x0,l.y-4); ctx.lineTo(l.x0,l.y+4); ctx.moveTo(l.x1,l.y-4); ctx.lineTo(l.x1,l.y+4); }
+    else if (l.kind==='dim-v')  { ctx.moveTo(l.x,l.y0); ctx.lineTo(l.x,l.y1); ctx.moveTo(l.x-4,l.y0); ctx.lineTo(l.x+4,l.y0); ctx.moveTo(l.x-4,l.y1); ctx.lineTo(l.x+4,l.y1); }
+    else if (l.kind==='bracket'){ const dx=l.corner%2===0?1:-1,dy=l.corner<2?1:-1; ctx.moveTo(l.x+dx*l.sz,l.y); ctx.lineTo(l.x,l.y); ctx.lineTo(l.x,l.y+dy*l.sz); }
+    else if (l.kind==='arc')    { ctx.arc(l.x,l.y,l.r,l.start,l.end); }
+    else if (l.kind==='square') { ctx.rect(l.x-l.sz,l.y-l.sz,l.sz*2,l.sz*2); }
+    else if (l.kind==='diag')   { ctx.moveTo(l.x0,l.y0); ctx.lineTo(l.x1,l.y1); }
     ctx.stroke();
     ctx.restore();
   });
 
-  // Ruler annotations
   annotations.forEach(a => {
     ctx.save();
     ctx.strokeStyle = DIMTXT;
     ctx.lineWidth = 0.3;
-    ctx.setLineDash([1, 5]);
+    ctx.setLineDash([1,5]);
     ctx.beginPath();
-    if (a.kind === 'ruler-top' || a.kind === 'ruler-bottom') {
-      ctx.moveTo(a.x0, a.y); ctx.lineTo(a.x1, a.y);
-      // tick marks every ~40px
-      for (let x = a.x0; x <= a.x1; x += 40) {
-        const big = Math.round((x - a.x0) % 200) < 2;
-        const h = big ? 5 : 3;
-        ctx.moveTo(x, a.y);
-        ctx.lineTo(x, a.y + (a.kind === 'ruler-top' ? h : -h));
-      }
-    } else if (a.kind === 'ruler-left') {
-      ctx.moveTo(a.x, a.y0); ctx.lineTo(a.x, a.y1);
-      for (let y = a.y0; y <= a.y1; y += 40) {
-        ctx.moveTo(a.x, y); ctx.lineTo(a.x + 3, y);
-      }
-    } else if (a.kind === 'ruler-right') {
-      ctx.moveTo(a.x, a.y0); ctx.lineTo(a.x, a.y1);
-      for (let y = a.y0; y <= a.y1; y += 40) {
-        ctx.moveTo(a.x, y); ctx.lineTo(a.x - 3, y);
-      }
+    if (a.kind==='ruler-top'||a.kind==='ruler-bottom') {
+      ctx.moveTo(a.x0,a.y); ctx.lineTo(a.x1,a.y);
+      for (let x=a.x0;x<=a.x1;x+=40) { ctx.moveTo(x,a.y); ctx.lineTo(x,a.y+(a.kind==='ruler-top'?4:-4)); }
+    } else if (a.kind==='ruler-left') {
+      ctx.moveTo(a.x,a.y0); ctx.lineTo(a.x,a.y1);
+      for (let y=a.y0;y<=a.y1;y+=40) { ctx.moveTo(a.x,y); ctx.lineTo(a.x+3,y); }
+    } else {
+      ctx.moveTo(a.x,a.y0); ctx.lineTo(a.x,a.y1);
+      for (let y=a.y0;y<=a.y1;y+=40) { ctx.moveTo(a.x,y); ctx.lineTo(a.x-3,y); }
     }
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
   });
 
-  // Glyphs
   glyphs.forEach(g => {
     ctx.save();
     ctx.font = `${g.size}px "Share Tech Mono", monospace`;
     ctx.fillStyle = g.color;
-    ctx.fillText(g.text, g.x, g.y);
+    ctx.fillText(g.text,g.x,g.y);
     ctx.restore();
   });
-
 }
 
 let rafId;
 function loop(time) {
-  t = time;
-
-  // Glitch effect based on cursor proximity to center
-  const cx = W / 2;
-  const cy = H / 2;
+  const cx = W/2, cy = H/2;
   let proximity = 0;
   if (mouseX !== null && mouseY !== null) {
-    const dist = Math.sqrt((mouseX - cx) ** 2 + (mouseY - cy) ** 2);
-    const radius = Math.min(W, H) * 0.25;
-    proximity = Math.max(0, 1 - dist / radius);
+    const dist = Math.sqrt((mouseX-cx)**2+(mouseY-cy)**2);
+    proximity = Math.max(0, 1 - dist / (Math.min(W,H)*0.25));
   }
 
-  const inner = document.querySelector('.wordmark-inner');
-  const krs = document.querySelector('.line-krs24');
-  const studio = document.querySelector('.line-studio');
+  const inner  = document.getElementById('wordmark-inner');
+  const krs    = document.getElementById('krs24-line');
+  const studio = document.getElementById('studio-line');
 
   if (proximity > 0.05 && Math.random() < proximity * 0.3) {
     const maxShift = proximity * 10;
-    const tx = (Math.random() - 0.5) * maxShift;
-    const ty = (Math.random() - 0.5) * maxShift * 0.4;
+    const tx = (Math.random()-0.5)*maxShift;
+    const ty = (Math.random()-0.5)*maxShift*0.4;
     if (Math.random() < 0.4) {
-      krs.style.transform    = `translate(${tx}px, ${ty}px)`;
-      studio.style.transform = `translate(${-tx * 0.6}px, ${-ty}px)`;
+      krs.style.transform    = `translate(${tx}px,${ty}px)`;
+      studio.style.transform = `translate(${-tx*0.6}px,${-ty}px)`;
     } else {
-      inner.style.transform = `translate(${tx}px, ${ty}px)`;
+      inner.style.transform = `translate(${tx}px,${ty}px)`;
     }
-    if (Math.random() < proximity * 0.5) {
-      krs.style.color    = Math.random() < 0.5 ? '#c8d8f0' : '#f0d8c8';
-      studio.style.color = Math.random() < 0.5 ? '#f0d8c8' : '#c8d8f0';
+    if (Math.random() < proximity*0.5) {
+      krs.style.color    = Math.random()<0.5 ? '#c8d8f0' : '#f0d8c8';
+      studio.style.color = Math.random()<0.5 ? '#f0d8c8' : '#c8d8f0';
     } else {
-      krs.style.color    = '#E8E4DC';
-      studio.style.color = '#E8E4DC';
+      krs.style.color = studio.style.color = '#E8E4DC';
     }
   } else {
-    inner.style.transform  = '';
-    krs.style.transform    = '';
-    studio.style.transform = '';
-    krs.style.color        = '#E8E4DC';
-    studio.style.color     = '#E8E4DC';
+    inner.style.transform = krs.style.transform = studio.style.transform = '';
+    krs.style.color = studio.style.color = '#E8E4DC';
   }
 
-  drawScene(time);
+  drawScene();
   rafId = requestAnimationFrame(loop);
 }
 
-window.addEventListener('resize', () => {
-  cancelAnimationFrame(rafId);
-  resize();
-  rafId = requestAnimationFrame(loop);
-});
-
+window.addEventListener('resize', () => { cancelAnimationFrame(rafId); resize(); rafId = requestAnimationFrame(loop); });
 resize();
 requestAnimationFrame(loop);
-
-// Speech bubble
-const bubble = document.getElementById('bubble');
-let bubbleTimeout;
-document.getElementById('wordmark-inner').addEventListener('click', () => {
-  bubble.classList.add('visible');
-  clearTimeout(bubbleTimeout);
-  bubbleTimeout = setTimeout(() => bubble.classList.remove('visible'), 2200);
-});
 </script>
 </body>
 </html>
