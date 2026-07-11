@@ -80,21 +80,6 @@
       .wordmark-inner { animation-duration: 0.01ms; }
     }
 
-    .ig-link {
-      position: fixed;
-      bottom: 28px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 10;
-      font-family: 'Share Tech Mono', monospace;
-      font-size: 11px;
-      letter-spacing: 0.18em;
-      color: rgba(232, 228, 220, 0.28);
-      text-decoration: none;
-      transition: color 0.3s;
-      white-space: nowrap;
-    }
-    .ig-link:hover { color: rgba(232, 228, 220, 0.75); }
   </style>
 </head>
 <body>
@@ -108,7 +93,6 @@
   </div>
 </div>
 
-<a class="ig-link" href="https://instagram.com/napsandbicycles" target="_blank" rel="noopener">@napsandbicycles</a>
 
 <script>
 const canvas = document.getElementById('c');
@@ -204,9 +188,35 @@ function drawScene() {
   ctx.fillStyle = BG;
   ctx.fillRect(0, 0, W, H);
 
-  const vig = ctx.createRadialGradient(W/2,H/2,H*0.1,W/2,H/2,H*0.85);
+  // ── Color bloom — layered soft radial washes behind the wordmark
+  const cx = W / 2, cy = H / 2;
+
+  // Deep indigo core
+  const bloom1 = ctx.createRadialGradient(cx, cy, 0, cx, cy, H * 0.38);
+  bloom1.addColorStop(0,   'rgba(22, 18, 80, 0.55)');
+  bloom1.addColorStop(0.5, 'rgba(14, 10, 55, 0.25)');
+  bloom1.addColorStop(1,   'rgba(0,  0,  0,  0)');
+  ctx.fillStyle = bloom1;
+  ctx.fillRect(0, 0, W, H);
+
+  // Copper bleed — offset slightly right and down
+  const bloom2 = ctx.createRadialGradient(cx * 1.15, cy * 1.1, 0, cx * 1.15, cy * 1.1, H * 0.3);
+  bloom2.addColorStop(0,   'rgba(90, 38, 12, 0.35)');
+  bloom2.addColorStop(0.5, 'rgba(60, 20,  6, 0.12)');
+  bloom2.addColorStop(1,   'rgba(0,  0,  0,  0)');
+  ctx.fillStyle = bloom2;
+  ctx.fillRect(0, 0, W, H);
+
+  // Teal accent — offset left and up
+  const bloom3 = ctx.createRadialGradient(cx * 0.82, cy * 0.85, 0, cx * 0.82, cy * 0.85, H * 0.22);
+  bloom3.addColorStop(0,   'rgba(8, 60, 80, 0.28)');
+  bloom3.addColorStop(1,   'rgba(0,  0,  0,  0)');
+  ctx.fillStyle = bloom3;
+  ctx.fillRect(0, 0, W, H);
+
+  const vig = ctx.createRadialGradient(cx,cy,H*0.1,cx,cy,H*0.85);
   vig.addColorStop(0,'rgba(0,0,0,0)');
-  vig.addColorStop(1,'rgba(0,0,0,0.55)');
+  vig.addColorStop(1,'rgba(0,0,0,0.62)');
   ctx.fillStyle = vig;
   ctx.fillRect(0,0,W,H);
 
