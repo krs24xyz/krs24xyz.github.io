@@ -348,6 +348,13 @@ window.addEventListener('touchend', e => {
 trigger.addEventListener('click', openGallery);
 closeBtn.addEventListener('click', closeGallery);
 
+// Click outside the image to close
+overlay.addEventListener('click', e => {
+  if (e.target === overlay || e.target === document.querySelector('.gallery-img-wrap')) {
+    closeGallery();
+  }
+});
+
 preload();
 
 // ═══════════════════════════════════════
