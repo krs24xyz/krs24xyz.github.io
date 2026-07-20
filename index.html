@@ -27,6 +27,7 @@
       display: block;
     }
 
+    /* ── WORDMARK ── */
     .wordmark {
       position: fixed;
       inset: 0;
@@ -71,21 +72,135 @@
       padding-left: 0.45em;
     }
 
+    /* ── ARCHIVE TRIGGER — faint mark bottom-left ── */
+    .archive-trigger {
+      position: fixed;
+      bottom: 28px;
+      left: 36px;
+      z-index: 10;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      color: rgba(232, 228, 220, 0.18);
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: color 0.4s;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      animation: appear 1.2s cubic-bezier(0.16, 1, 0.3, 1) 2.4s forwards;
+    }
+    .archive-trigger::before {
+      content: '';
+      display: block;
+      width: 14px;
+      height: 14px;
+      border: 1px solid rgba(232, 228, 220, 0.18);
+      transition: border-color 0.4s;
+      flex-shrink: 0;
+    }
+    .archive-trigger:hover {
+      color: rgba(232, 228, 220, 0.55);
+    }
+    .archive-trigger:hover::before {
+      border-color: rgba(232, 228, 220, 0.45);
+    }
+
+    /* ── GALLERY OVERLAY ── */
+    .gallery-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: #000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.6s ease;
+    }
+
+    .gallery-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    /* Image container */
+    .gallery-img-wrap {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .gallery-img {
+      max-width: 92vw;
+      max-height: 88vh;
+      object-fit: contain;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    .gallery-img.visible { opacity: 1; }
+
+    /* Counter — bottom right */
+    .gallery-counter {
+      position: absolute;
+      bottom: 24px;
+      right: 32px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: rgba(232, 228, 220, 0.22);
+    }
+
+    /* Close — top right */
+    .gallery-close {
+      position: absolute;
+      top: 24px;
+      right: 32px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      color: rgba(232, 228, 220, 0.2);
+      cursor: pointer;
+      transition: color 0.3s;
+      user-select: none;
+    }
+    .gallery-close:hover { color: rgba(232, 228, 220, 0.6); }
+
+    /* Scroll hint — bottom center, fades after first scroll */
+    .gallery-hint {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      color: rgba(232, 228, 220, 0.14);
+      transition: opacity 0.6s;
+      white-space: nowrap;
+    }
+    .gallery-hint.hidden { opacity: 0; }
+
     @keyframes appear {
       from { opacity: 0; }
       to   { opacity: 1; }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .wordmark-inner { animation-duration: 0.01ms; }
+      .wordmark-inner, .archive-trigger { animation-duration: 0.01ms; }
     }
-
   </style>
 </head>
 <body>
 
 <canvas id="c"></canvas>
 
+<!-- Wordmark -->
 <div class="wordmark" aria-label="krs24.studio">
   <div class="wordmark-inner" id="wordmark-inner">
     <span class="line-krs24" id="krs24-line">KRS24</span>
@@ -93,17 +208,157 @@
   </div>
 </div>
 
+<!-- Archive entry point -->
+<div class="archive-trigger" id="archive-trigger" role="button" aria-label="Open archive">
+  ARCHIVE
+</div>
+
+<!-- Gallery overlay -->
+<div class="gallery-overlay" id="gallery-overlay">
+  <div class="gallery-img-wrap">
+    <img class="gallery-img" id="gallery-img" src="" alt="" />
+  </div>
+  <div class="gallery-counter" id="gallery-counter">01 / 00</div>
+  <div class="gallery-close" id="gallery-close">ESC</div>
+  <div class="gallery-hint" id="gallery-hint">SCROLL TO NAVIGATE</div>
+</div>
+
+<!-- Photo manifest — edit this list to add/remove images -->
+<script src="archive/photos.js"></script>
 
 <script>
+// ═══════════════════════════════════════
+// GALLERY
+// ═══════════════════════════════════════
+const overlay    = document.getElementById('gallery-overlay');
+const imgEl      = document.getElementById('gallery-img');
+const counter    = document.getElementById('gallery-counter');
+const closeBtn   = document.getElementById('gallery-close');
+const hint       = document.getElementById('gallery-hint');
+const trigger    = document.getElementById('archive-trigger');
+
+let currentIndex = 0;
+let isOpen       = false;
+let isTransitioning = false;
+let hintDismissed = false;
+
+// Preload images
+const preloaded = [];
+function preload() {
+  if (typeof PHOTOS === 'undefined') return;
+  PHOTOS.forEach((src, i) => {
+    const img = new Image();
+    img.src = src;
+    preloaded[i] = img;
+  });
+}
+
+function updateCounter() {
+  const total = (typeof PHOTOS !== 'undefined') ? PHOTOS.length : 0;
+  const n = String(currentIndex + 1).padStart(2, '0');
+  const t = String(total).padStart(2, '0');
+  counter.textContent = `${n} / ${t}`;
+}
+
+function showImage(index, direction) {
+  if (typeof PHOTOS === 'undefined' || PHOTOS.length === 0) return;
+  if (isTransitioning) return;
+  isTransitioning = true;
+
+  imgEl.classList.remove('visible');
+
+  setTimeout(() => {
+    currentIndex = (index + PHOTOS.length) % PHOTOS.length;
+    imgEl.src = PHOTOS[currentIndex];
+    imgEl.onload = () => {
+      imgEl.classList.add('visible');
+      isTransitioning = false;
+    };
+    // Fallback if already cached
+    if (imgEl.complete) {
+      imgEl.classList.add('visible');
+      isTransitioning = false;
+    }
+    updateCounter();
+  }, 300);
+}
+
+function openGallery() {
+  if (typeof PHOTOS === 'undefined' || PHOTOS.length === 0) return;
+  currentIndex = 0;
+  isOpen = true;
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  imgEl.src = PHOTOS[0];
+  imgEl.onload = () => imgEl.classList.add('visible');
+  if (imgEl.complete) imgEl.classList.add('visible');
+  updateCounter();
+}
+
+function closeGallery() {
+  isOpen = false;
+  imgEl.classList.remove('visible');
+  setTimeout(() => {
+    overlay.classList.remove('open');
+    imgEl.src = '';
+    hintDismissed = false;
+    hint.classList.remove('hidden');
+  }, 500);
+}
+
+function next() {
+  if (!hintDismissed) { hint.classList.add('hidden'); hintDismissed = true; }
+  showImage(currentIndex + 1);
+}
+
+function prev() {
+  if (!hintDismissed) { hint.classList.add('hidden'); hintDismissed = true; }
+  showImage(currentIndex - 1);
+}
+
+// Scroll
+let scrollAccum = 0;
+window.addEventListener('wheel', e => {
+  if (!isOpen) return;
+  e.preventDefault();
+  scrollAccum += e.deltaY;
+  if (Math.abs(scrollAccum) > 60) {
+    scrollAccum > 0 ? next() : prev();
+    scrollAccum = 0;
+  }
+}, { passive: false });
+
+// Arrow keys
+window.addEventListener('keydown', e => {
+  if (!isOpen) return;
+  if (e.key === 'Escape')      closeGallery();
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next();
+  if (e.key === 'ArrowUp'   || e.key === 'ArrowLeft')  prev();
+});
+
+// Touch swipe
+let touchStartY = 0;
+window.addEventListener('touchstart', e => { if (isOpen) touchStartY = e.touches[0].clientY; }, { passive: true });
+window.addEventListener('touchend', e => {
+  if (!isOpen) return;
+  const dy = touchStartY - e.changedTouches[0].clientY;
+  if (Math.abs(dy) > 40) { dy > 0 ? next() : prev(); }
+}, { passive: true });
+
+trigger.addEventListener('click', openGallery);
+closeBtn.addEventListener('click', closeGallery);
+
+preload();
+
+// ═══════════════════════════════════════
+// CANVAS BACKGROUND
+// ═══════════════════════════════════════
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
 let W, H, dpr;
-let lines = [];
-let glyphs = [];
-let annotations = [];
-let mouseX = null;
-let mouseY = null;
+let lines = [], glyphs = [], annotations = [];
+let mouseX = null, mouseY = null;
 
 window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; }, { passive: true });
 window.addEventListener('mouseleave', () => { mouseX = null; mouseY = null; });
@@ -119,12 +374,9 @@ const DIMTXT   = 'rgba(80, 110, 140, 0.28)';
 
 function resize() {
   dpr = window.devicePixelRatio || 1;
-  W = window.innerWidth;
-  H = window.innerHeight;
-  canvas.width  = W * dpr;
-  canvas.height = H * dpr;
-  canvas.style.width  = W + 'px';
-  canvas.style.height = H + 'px';
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   ctx.scale(dpr, dpr);
   buildScene();
 }
@@ -138,112 +390,95 @@ function buildScene() {
 
   for (let x = STEP; x < W; x += STEP * (Math.random() < 0.3 ? 2 : 1)) {
     if (Math.random() < 0.45) continue;
-    const y0 = rand(0, H * 0.3), y1 = rand(H * 0.7, H);
-    lines.push({ kind: 'v', x, y0, y1, color: Math.random() < 0.15 ? BLUETHIN : GRID, w: Math.random() < 0.12 ? 0.8 : 0.3 });
+    const y0 = rand(0, H*0.3), y1 = rand(H*0.7, H);
+    lines.push({ kind:'v', x, y0, y1, color: Math.random()<0.15?BLUETHIN:GRID, w: Math.random()<0.12?0.8:0.3 });
   }
   for (let y = STEP; y < H; y += STEP * (Math.random() < 0.3 ? 2 : 1)) {
     if (Math.random() < 0.5) continue;
-    const x0 = rand(0, W * 0.25), x1 = rand(W * 0.75, W);
-    lines.push({ kind: 'h', y, x0, x1, color: Math.random() < 0.12 ? BLUETHIN : GRIDFADE, w: Math.random() < 0.08 ? 0.8 : 0.3 });
+    const x0 = rand(0,W*0.25), x1 = rand(W*0.75,W);
+    lines.push({ kind:'h', y, x0, x1, color: Math.random()<0.12?BLUETHIN:GRIDFADE, w: Math.random()<0.08?0.8:0.3 });
   }
-  for (let i = 0; i < Math.floor(rand(10, 18)); i++) {
-    const copper = Math.random() < 0.22;
-    lines.push({ kind: 'cross', x: rand(W*0.04, W*0.96), y: rand(H*0.05, H*0.95), sz: rand(5, 14), color: copper ? COPPER : GRID, w: copper ? 0.7 : 0.4 });
+  for (let i = 0; i < Math.floor(rand(10,18)); i++) {
+    const copper = Math.random()<0.22;
+    lines.push({ kind:'cross', x:rand(W*0.04,W*0.96), y:rand(H*0.05,H*0.95), sz:rand(5,14), color:copper?COPPER:GRID, w:copper?0.7:0.4 });
   }
-  for (let i = 0; i < Math.floor(rand(3, 7)); i++) {
-    lines.push({ kind: 'square', x: rand(W*0.05, W*0.95), y: rand(H*0.05, H*0.95), sz: rand(3, 7), color: Math.random() < 0.2 ? COPPER : GRID, w: 0.3 });
+  for (let i = 0; i < Math.floor(rand(3,7)); i++) {
+    lines.push({ kind:'square', x:rand(W*0.05,W*0.95), y:rand(H*0.05,H*0.95), sz:rand(3,7), color:Math.random()<0.2?COPPER:GRID, w:0.3 });
   }
-  for (let i = 0; i < Math.floor(rand(6, 14)); i++) {
-    if (Math.random() < 0.5) {
-      const y = rand(H*0.1, H*0.9), x0 = rand(W*0.05, W*0.4), x1 = x0 + rand(40, 160);
-      lines.push({ kind: 'dim-h', y, x0, x1, color: GRID, w: 0.3 });
+  for (let i = 0; i < Math.floor(rand(6,14)); i++) {
+    if (Math.random()<0.5) {
+      const y=rand(H*0.1,H*0.9), x0=rand(W*0.05,W*0.4), x1=x0+rand(40,160);
+      lines.push({ kind:'dim-h', y, x0, x1, color:GRID, w:0.3 });
     } else {
-      const x = rand(W*0.05, W*0.95), y0 = rand(H*0.05, H*0.5), y1 = y0 + rand(40, 140);
-      lines.push({ kind: 'dim-v', x, y0, y1, color: GRID, w: 0.3 });
+      const x=rand(W*0.05,W*0.95), y0=rand(H*0.05,H*0.5), y1=y0+rand(40,140);
+      lines.push({ kind:'dim-v', x, y0, y1, color:GRID, w:0.3 });
     }
   }
-  for (let i = 0; i < Math.floor(rand(1, 4)); i++) {
-    const x0 = rand(0,W), y0 = rand(0,H), len = rand(60,180), a = rand(-Math.PI*0.3, Math.PI*0.3);
-    lines.push({ kind: 'diag', x0, y0, x1: x0+Math.cos(a)*len, y1: y0+Math.sin(a)*len, color: 'rgba(28,36,50,0.7)', w: 0.3 });
+  for (let i = 0; i < Math.floor(rand(1,4)); i++) {
+    const x0=rand(0,W), y0=rand(0,H), len=rand(60,180), a=rand(-Math.PI*0.3,Math.PI*0.3);
+    lines.push({ kind:'diag', x0, y0, x1:x0+Math.cos(a)*len, y1:y0+Math.sin(a)*len, color:'rgba(28,36,50,0.7)', w:0.3 });
   }
   [[W*0.06,H*0.07],[W*0.91,H*0.07],[W*0.06,H*0.90],[W*0.91,H*0.90]].forEach(([x,y],i) => {
-    if (Math.random() < 0.3) return;
-    lines.push({ kind: 'bracket', x, y, sz: rand(14,28), corner: i, color: i===1 ? COPPER : BLUE, w: i===1 ? 0.8 : 0.5 });
+    if (Math.random()<0.3) return;
+    lines.push({ kind:'bracket', x, y, sz:rand(14,28), corner:i, color:i===1?COPPER:BLUE, w:i===1?0.8:0.5 });
   });
-  for (let i = 0; i < Math.floor(rand(1, 3)); i++) {
-    lines.push({ kind: 'arc', x: rand(W*0.55,W*0.78), y: rand(H*0.18,H*0.72), r: rand(28,55), start: rand(0,Math.PI), end: rand(Math.PI,Math.PI*2), color: BLUE, w: 0.4 });
+  for (let i = 0; i < Math.floor(rand(1,3)); i++) {
+    lines.push({ kind:'arc', x:rand(W*0.55,W*0.78), y:rand(H*0.18,H*0.72), r:rand(28,55), start:rand(0,Math.PI), end:rand(Math.PI,Math.PI*2), color:BLUE, w:0.4 });
   }
   const labelPool = ['B1','A2','T','V','∅','×','◇','A1','R','COMM','9.3','11.2','∆','⊕','▪','0.5','3.5'];
-  for (let i = 0; i < Math.floor(rand(18, 30)); i++) {
-    glyphs.push({ x: rand(W*0.02,W*0.96), y: rand(H*0.03,H*0.97), text: pick(labelPool), size: rand(7,11), color: Math.random()<0.2?'rgba(90,50,24,0.35)':GLYPHTXT });
+  for (let i = 0; i < Math.floor(rand(18,30)); i++) {
+    glyphs.push({ x:rand(W*0.02,W*0.96), y:rand(H*0.03,H*0.97), text:pick(labelPool), size:rand(7,11), color:Math.random()<0.2?'rgba(90,50,24,0.35)':GLYPHTXT });
   }
-  annotations.push({ kind: 'ruler-top',    x0: W*0.04, x1: W*0.96, y:  H*0.04 });
-  annotations.push({ kind: 'ruler-bottom', x0: W*0.04, x1: W*0.96, y:  H*0.95 });
-  annotations.push({ kind: 'ruler-left',   y0: H*0.04, y1: H*0.95, x:  W*0.035 });
-  annotations.push({ kind: 'ruler-right',  y0: H*0.04, y1: H*0.95, x:  W*0.965 });
+  annotations.push({ kind:'ruler-top',    x0:W*0.04, x1:W*0.96, y:H*0.04 });
+  annotations.push({ kind:'ruler-bottom', x0:W*0.04, x1:W*0.96, y:H*0.95 });
+  annotations.push({ kind:'ruler-left',   y0:H*0.04, y1:H*0.95, x:W*0.035 });
+  annotations.push({ kind:'ruler-right',  y0:H*0.04, y1:H*0.95, x:W*0.965 });
 }
 
 function drawScene() {
-  ctx.clearRect(0, 0, W, H);
+  ctx.clearRect(0,0,W,H);
   ctx.fillStyle = BG;
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(0,0,W,H);
 
-  // ── Color bloom — layered soft radial washes behind the wordmark
-  const cx = W / 2, cy = H / 2;
+  const cx=W/2, cy=H/2;
+  const bloom1 = ctx.createRadialGradient(cx,cy,0,cx,cy,H*0.38);
+  bloom1.addColorStop(0,'rgba(22,18,80,0.55)');
+  bloom1.addColorStop(0.5,'rgba(14,10,55,0.25)');
+  bloom1.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = bloom1; ctx.fillRect(0,0,W,H);
 
-  // Deep indigo core
-  const bloom1 = ctx.createRadialGradient(cx, cy, 0, cx, cy, H * 0.38);
-  bloom1.addColorStop(0,   'rgba(22, 18, 80, 0.55)');
-  bloom1.addColorStop(0.5, 'rgba(14, 10, 55, 0.25)');
-  bloom1.addColorStop(1,   'rgba(0,  0,  0,  0)');
-  ctx.fillStyle = bloom1;
-  ctx.fillRect(0, 0, W, H);
+  const bloom2 = ctx.createRadialGradient(cx*1.15,cy*1.1,0,cx*1.15,cy*1.1,H*0.3);
+  bloom2.addColorStop(0,'rgba(90,38,12,0.35)');
+  bloom2.addColorStop(0.5,'rgba(60,20,6,0.12)');
+  bloom2.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = bloom2; ctx.fillRect(0,0,W,H);
 
-  // Copper bleed — offset slightly right and down
-  const bloom2 = ctx.createRadialGradient(cx * 1.15, cy * 1.1, 0, cx * 1.15, cy * 1.1, H * 0.3);
-  bloom2.addColorStop(0,   'rgba(90, 38, 12, 0.35)');
-  bloom2.addColorStop(0.5, 'rgba(60, 20,  6, 0.12)');
-  bloom2.addColorStop(1,   'rgba(0,  0,  0,  0)');
-  ctx.fillStyle = bloom2;
-  ctx.fillRect(0, 0, W, H);
-
-  // Teal accent — offset left and up
-  const bloom3 = ctx.createRadialGradient(cx * 0.82, cy * 0.85, 0, cx * 0.82, cy * 0.85, H * 0.22);
-  bloom3.addColorStop(0,   'rgba(8, 60, 80, 0.28)');
-  bloom3.addColorStop(1,   'rgba(0,  0,  0,  0)');
-  ctx.fillStyle = bloom3;
-  ctx.fillRect(0, 0, W, H);
+  const bloom3 = ctx.createRadialGradient(cx*0.82,cy*0.85,0,cx*0.82,cy*0.85,H*0.22);
+  bloom3.addColorStop(0,'rgba(8,60,80,0.28)');
+  bloom3.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = bloom3; ctx.fillRect(0,0,W,H);
 
   const vig = ctx.createRadialGradient(cx,cy,H*0.1,cx,cy,H*0.85);
   vig.addColorStop(0,'rgba(0,0,0,0)');
   vig.addColorStop(1,'rgba(0,0,0,0.62)');
-  ctx.fillStyle = vig;
-  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = vig; ctx.fillRect(0,0,W,H);
 
   lines.forEach(l => {
-    ctx.save();
-    ctx.strokeStyle = l.color;
-    ctx.lineWidth = l.w;
-    ctx.beginPath();
-    if      (l.kind==='v')      { ctx.moveTo(l.x,l.y0); ctx.lineTo(l.x,l.y1); }
-    else if (l.kind==='h')      { ctx.moveTo(l.x0,l.y); ctx.lineTo(l.x1,l.y); }
-    else if (l.kind==='cross')  { ctx.moveTo(l.x-l.sz,l.y); ctx.lineTo(l.x+l.sz,l.y); ctx.moveTo(l.x,l.y-l.sz); ctx.lineTo(l.x,l.y+l.sz); }
-    else if (l.kind==='dim-h')  { ctx.moveTo(l.x0,l.y); ctx.lineTo(l.x1,l.y); ctx.moveTo(l.x0,l.y-4); ctx.lineTo(l.x0,l.y+4); ctx.moveTo(l.x1,l.y-4); ctx.lineTo(l.x1,l.y+4); }
-    else if (l.kind==='dim-v')  { ctx.moveTo(l.x,l.y0); ctx.lineTo(l.x,l.y1); ctx.moveTo(l.x-4,l.y0); ctx.lineTo(l.x+4,l.y0); ctx.moveTo(l.x-4,l.y1); ctx.lineTo(l.x+4,l.y1); }
-    else if (l.kind==='bracket'){ const dx=l.corner%2===0?1:-1,dy=l.corner<2?1:-1; ctx.moveTo(l.x+dx*l.sz,l.y); ctx.lineTo(l.x,l.y); ctx.lineTo(l.x,l.y+dy*l.sz); }
-    else if (l.kind==='arc')    { ctx.arc(l.x,l.y,l.r,l.start,l.end); }
-    else if (l.kind==='square') { ctx.rect(l.x-l.sz,l.y-l.sz,l.sz*2,l.sz*2); }
-    else if (l.kind==='diag')   { ctx.moveTo(l.x0,l.y0); ctx.lineTo(l.x1,l.y1); }
-    ctx.stroke();
-    ctx.restore();
+    ctx.save(); ctx.strokeStyle=l.color; ctx.lineWidth=l.w; ctx.beginPath();
+    if      (l.kind==='v')       { ctx.moveTo(l.x,l.y0); ctx.lineTo(l.x,l.y1); }
+    else if (l.kind==='h')       { ctx.moveTo(l.x0,l.y); ctx.lineTo(l.x1,l.y); }
+    else if (l.kind==='cross')   { ctx.moveTo(l.x-l.sz,l.y); ctx.lineTo(l.x+l.sz,l.y); ctx.moveTo(l.x,l.y-l.sz); ctx.lineTo(l.x,l.y+l.sz); }
+    else if (l.kind==='dim-h')   { ctx.moveTo(l.x0,l.y); ctx.lineTo(l.x1,l.y); ctx.moveTo(l.x0,l.y-4); ctx.lineTo(l.x0,l.y+4); ctx.moveTo(l.x1,l.y-4); ctx.lineTo(l.x1,l.y+4); }
+    else if (l.kind==='dim-v')   { ctx.moveTo(l.x,l.y0); ctx.lineTo(l.x,l.y1); ctx.moveTo(l.x-4,l.y0); ctx.lineTo(l.x+4,l.y0); ctx.moveTo(l.x-4,l.y1); ctx.lineTo(l.x+4,l.y1); }
+    else if (l.kind==='bracket') { const dx=l.corner%2===0?1:-1,dy=l.corner<2?1:-1; ctx.moveTo(l.x+dx*l.sz,l.y); ctx.lineTo(l.x,l.y); ctx.lineTo(l.x,l.y+dy*l.sz); }
+    else if (l.kind==='arc')     { ctx.arc(l.x,l.y,l.r,l.start,l.end); }
+    else if (l.kind==='square')  { ctx.rect(l.x-l.sz,l.y-l.sz,l.sz*2,l.sz*2); }
+    else if (l.kind==='diag')    { ctx.moveTo(l.x0,l.y0); ctx.lineTo(l.x1,l.y1); }
+    ctx.stroke(); ctx.restore();
   });
 
   annotations.forEach(a => {
-    ctx.save();
-    ctx.strokeStyle = DIMTXT;
-    ctx.lineWidth = 0.3;
-    ctx.setLineDash([1,5]);
-    ctx.beginPath();
+    ctx.save(); ctx.strokeStyle=DIMTXT; ctx.lineWidth=0.3; ctx.setLineDash([1,5]); ctx.beginPath();
     if (a.kind==='ruler-top'||a.kind==='ruler-bottom') {
       ctx.moveTo(a.x0,a.y); ctx.lineTo(a.x1,a.y);
       for (let x=a.x0;x<=a.x1;x+=40) { ctx.moveTo(x,a.y); ctx.lineTo(x,a.y+(a.kind==='ruler-top'?4:-4)); }
@@ -254,9 +489,7 @@ function drawScene() {
       ctx.moveTo(a.x,a.y0); ctx.lineTo(a.x,a.y1);
       for (let y=a.y0;y<=a.y1;y+=40) { ctx.moveTo(a.x,y); ctx.lineTo(a.x-3,y); }
     }
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
+    ctx.stroke(); ctx.setLineDash([]); ctx.restore();
   });
 
   glyphs.forEach(g => {
@@ -269,31 +502,29 @@ function drawScene() {
 }
 
 let rafId;
-function loop(time) {
-  const cx = W/2, cy = H/2;
+function loop() {
+  const cx=W/2, cy=H/2;
   let proximity = 0;
-  if (mouseX !== null && mouseY !== null) {
+  if (mouseX!==null && mouseY!==null) {
     const dist = Math.sqrt((mouseX-cx)**2+(mouseY-cy)**2);
-    proximity = Math.max(0, 1 - dist / (Math.min(W,H)*0.25));
+    proximity = Math.max(0, 1 - dist/(Math.min(W,H)*0.25));
   }
 
   const inner  = document.getElementById('wordmark-inner');
   const krs    = document.getElementById('krs24-line');
   const studio = document.getElementById('studio-line');
 
-  if (proximity > 0.05 && Math.random() < proximity * 0.3) {
-    const maxShift = proximity * 10;
-    const tx = (Math.random()-0.5)*maxShift;
-    const ty = (Math.random()-0.5)*maxShift*0.4;
-    if (Math.random() < 0.4) {
+  if (proximity>0.05 && Math.random()<proximity*0.3) {
+    const tx=(Math.random()-0.5)*proximity*10, ty=(Math.random()-0.5)*proximity*4;
+    if (Math.random()<0.4) {
       krs.style.transform    = `translate(${tx}px,${ty}px)`;
       studio.style.transform = `translate(${-tx*0.6}px,${-ty}px)`;
     } else {
       inner.style.transform = `translate(${tx}px,${ty}px)`;
     }
-    if (Math.random() < proximity*0.5) {
-      krs.style.color    = Math.random()<0.5 ? '#c8d8f0' : '#f0d8c8';
-      studio.style.color = Math.random()<0.5 ? '#f0d8c8' : '#c8d8f0';
+    if (Math.random()<proximity*0.5) {
+      krs.style.color    = Math.random()<0.5?'#c8d8f0':'#f0d8c8';
+      studio.style.color = Math.random()<0.5?'#f0d8c8':'#c8d8f0';
     } else {
       krs.style.color = studio.style.color = '#E8E4DC';
     }
